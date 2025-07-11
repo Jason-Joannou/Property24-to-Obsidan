@@ -19,9 +19,9 @@ class PropertyScrapper:
         text = text.strip()
         text = re.sub(r'\s+', ' ', text)
         text = re.sub(r'[²\u00b2]', '2', text)
-        money_match = re.match(r'^R\s*([\d,]+)', text)
+        money_match = re.match(r'^R\s*([\d\s,]+)', text)
         if money_match:
-            text = money_match.group(1).replace(',', '')
+            text = money_match.group(1).replace(' ', '').replace(',', '')
         return text
     
     def to_snake_case(self, text):
