@@ -4,6 +4,7 @@ import re
 import json
 from datetime import datetime
 import os
+from scrapper.obsidian_note_generator import PropertyNoteGenerator
 
 class PropertyScrapper:
     def __init__(self) -> None:
@@ -15,7 +16,22 @@ class PropertyScrapper:
         """Clean and normalize text"""
         if not text:
             return ""
-        return re.sub(r'\\s+', ' ', text.strip())
+        text = text.strip()
+        text = re.sub(r'\s+', ' ', text)
+        text = re.sub(r'[²\u00b2]', '2', text)
+        money_match = re.match(r'^R\s*([\d,]+)', text)
+        if money_match:
+            text = money_match.group(1).replace(',', '')
+        return text
+    
+    def to_snake_case(self, text):
+        if not text:
+            return ""
+        # Remove leading/trailing spaces, replace spaces with underscores, and lowercase
+        text = text.strip()
+        text = re.sub(r'\s+', '_', text)  # Replace spaces (or multiple spaces) with _
+        text = re.sub(r'[^\w_]', '', text)  # Remove non-word characters except underscore
+        return text.lower()
     
     def extract_number(self, text):
         """Extract numbers from text"""
@@ -24,124 +40,68 @@ class PropertyScrapper:
         numbers = re.findall(r'[\\d,]+', str(text))
         return numbers[0].replace(',', '') if numbers else ""
     
-    def extract_property_overview(self, soup: BeautifulSoup):
+    def extract_property_overview(self, listing_number: str, soup: BeautifulSoup):
         """Extract detailed property overview data from the accordion section"""
         overview_data = {}
+        poi_url = f"https://www.property24.com/ListingReadOnly/PointsOfInterestForListing?ListingNumber={listing_number}"
         
         # Find the property overview accordion
         overview_section = soup.find('div', class_='p24_listingCard p24_propertyOverview')
+        
         if not overview_section:
             return overview_data
         
-        # Extract all key-value pairs from the overview rows
-        overview_rows = overview_section.find_all('div', class_='p24_propertyOverviewRow')
-        
-        for row in overview_rows:
-            key_elem = row.find('div', class_='p24_propertyOverviewKey')
-            value_elem = row.find('div', class_='p24_info')
-            
-            if key_elem and value_elem:
-                key = self.clean_text(key_elem.get_text()).lower().replace(' ', '_')
-                value = self.clean_text(value_elem.get_text())
-                
-                if key and value:
-                    overview_data[key] = value
+        # Extract every panel inside the overview - the panels will be our key information and thier rows our values.
+        panels = overview_section.find_all('div', class_='panel')
+        for panel in panels:
+            key_elem = panel.find('div', class_="panel-heading")
+            key_text = self.to_snake_case(key_elem.get_text(strip=True))
+            if key_text:
+                overview_data[key_text] = {}
+                panel_rows = panel.find_all('div', class_='p24_propertyOverviewRow')
+                if key_text == "points_of_interest":
+                    response = requests.get(poi_url, headers=self.headers)
+                    if response.status_code == 200:
+                        poi_soup = BeautifulSoup(response.content, 'html.parser')
+                        poi_categories = poi_soup.find_all('div', class_='js_P24_POICategory')
+
+                        poi_data = {}
+                        for category in poi_categories:
+                            category_name_elem = category.find('span', class_='p24_semibold')
+                            if not category_name_elem:
+                                continue
+                            category_name = self.to_snake_case(self.clean_text(category_name_elem.get_text(strip=True)))
+
+                            places = []
+                            rows = category.find_all('div', class_='row')
+                            for row in rows[1:]:  # skip first row (header)
+                                cols = row.find_all('div', class_='col-6')
+                                if len(cols) >= 2:
+                                    place_name = self.clean_text(cols[0].get_text(strip=True))
+                                    distance = self.clean_text(cols[1].get_text(strip=True))
+                                    places.append({
+                                        'name': place_name,
+                                        'distance': distance
+                                    })
+
+                            poi_data[category_name] = places
+
+                        overview_data[key_text] = poi_data
+                else:
+                    for row in panel_rows:
+                        key_elem = row.find('div', class_='p24_propertyOverviewKey')
+                        value_elem = row.find('div', class_='noPadding')
+                        if key_text == "rooms":
+                            values = []
+                            for value in value_elem.find_all('div', class_='p24_info'):
+                                value = self.clean_text(value.get_text(strip=True))
+                                values.append(value)
+                            overview_data[key_text][self.to_snake_case(self.clean_text(key_elem.get_text(strip=True)))] = values[0] if len(values) == 1 else values
+                        else:
+                            overview_data[key_text][self.to_snake_case(self.clean_text(key_elem.get_text(strip=True)))] = self.clean_text(value_elem.get_text(strip=True))
         
         return overview_data
     
-    def extract_rooms_details(self, soup: BeautifulSoup):
-        """Extract detailed room information"""
-        rooms_data = {}
-        
-        # Find the rooms accordion section
-        rooms_section = soup.find('div', id='js_accordion_rooms')
-        if not rooms_section:
-            return rooms_data
-        
-        # Extract room details
-        room_rows = rooms_section.find_all('div', class_='p24_propertyOverviewRow')
-        
-        for row in room_rows:
-            key_elem = row.find('div', class_='p24_propertyOverviewKey')
-            value_elems = row.find_all('div', class_='p24_info')
-            
-            if key_elem and value_elems:
-                key = self.clean_text(key_elem.get_text()).lower().replace(' ', '_')
-                values = [self.clean_text(elem.get_text()) for elem in value_elems if elem.get_text().strip()]
-                
-                if key and values:
-                    if len(values) == 1:
-                        rooms_data[key] = values[0]
-                    else:
-                        rooms_data[key] = values
-        
-        return rooms_data
-    
-    def extract_external_features(self, soup: BeautifulSoup):
-        """Extract external features like parking, pool, etc."""
-        external_data = {}
-        
-        # Find the external features accordion section
-        external_section = soup.find('div', id='js_accordion_externalfeatures')
-        if not external_section:
-            return external_data
-        
-        # Extract external features
-        feature_rows = external_section.find_all('div', class_='p24_propertyOverviewRow')
-        
-        for row in feature_rows:
-            key_elem = row.find('div', class_='p24_propertyOverviewKey')
-            value_elem = row.find('div', class_='p24_info')
-            
-            if key_elem and value_elem:
-                key = self.clean_text(key_elem.get_text()).lower().replace(' ', '_')
-                value = self.clean_text(value_elem.get_text())
-                
-                if key and value:
-                    external_data[key] = value
-        
-        return external_data
-    
-    def extract_points_of_interest(self, soup: BeautifulSoup):
-        """Extract points of interest (schools, restaurants, etc.)"""
-        poi_data = {}
-        
-        # Find the points of interest section
-        poi_section = soup.find('div', id='P24_pointsOfInterest')
-        if not poi_section:
-            return poi_data
-        
-        # Extract POI categories
-        poi_categories = poi_section.find_all('div', class_='js_P24_POICategory')
-        
-        for category in poi_categories:
-            # Get category name
-            category_name_elem = category.find('span', class_='p24_semibold')
-            if not category_name_elem:
-                continue
-                
-            category_name = self.clean_text(category_name_elem.get_text()).lower().replace(' ', '_').replace('_and_', '_')
-            
-            # Get all POI items in this category
-            poi_items = []
-            poi_rows = category.find_all('div', class_='row')[1:]  # Skip the header row
-            
-            for row in poi_rows:
-                cols = row.find_all('div', class_='col-6')
-                if len(cols) >= 2:
-                    name = self.clean_text(cols[0].get_text())
-                    distance = self.clean_text(cols[1].get_text())
-                    
-                    if name and distance and 'view more' not in name.lower():
-                        poi_items.append({
-                            'name': name,
-                            'distance': distance
-                        })
-            
-            if poi_items:
-                poi_data[category_name] = poi_items
-        
-        return poi_data
     
     def extract_key_features(self, soup: BeautifulSoup):
         """Extract key features from the p24_keyFeaturesContainer section"""
@@ -160,7 +120,7 @@ class PropertyScrapper:
                 feature_amount_elem = feature.find('span', class_='p24_featureAmount')
                 
                 if feature_name_elem:
-                    feature_name = self.clean_text(feature_name_elem.get_text()).lower().replace(':', '').replace(' ', '_')
+                    feature_name = self.to_snake_case(self.clean_text(feature_name_elem.get_text()).lower().replace(':', ''))
                     
                     if feature_amount_elem:
                         # Feature with amount (e.g., "Bedrooms: 2")
@@ -176,70 +136,65 @@ class PropertyScrapper:
         """Extract data from JSON-LD structured data"""
         json_scripts = soup.find_all('script', type='application/ld+json')
         
-        for script in json_scripts:
-            try:
-                json_data = json.loads(script.string)
-                
-                if isinstance(json_data, dict) and '@graph' in json_data:
-                    for item in json_data['@graph']:
-                        if item.get('@type') == 'RealEstateListing':
-                            property_info = item.get('about', {})
-                            offers_info = item.get('offers', {})
-                            
-                            return {
-                                'title': item.get('name', ''),
-                                'description': item.get('description', ''),
-                                'price': offers_info.get('priceSpecification', {}).get('price', ''),
-                                'currency': offers_info.get('priceSpecification', {}).get('priceCurrency', ''),
-                                'bedrooms': property_info.get('numberOfBedrooms', ''),
-                                'bathrooms': property_info.get('numberOfBathroomsTotal', ''),
-                                'size': property_info.get('floorSize', {}).get('value', ''),
-                                'property_type': property_info.get('@type', ''),
-                                'address': property_info.get('address', {}).get('streetAddress', ''),
-                                'area': property_info.get('address', {}).get('addressLocality', ''),
-                                'province': property_info.get('address', {}).get('addressRegion', ''),
-                                'latitude': property_info.get('latitude', ''),
-                                'longitude': property_info.get('longitude', ''),
-                                'pets_allowed': property_info.get('petsAllowed', ''),
-                                'agent_name': offers_info.get('offeredBy', {}).get('name', ''),
-                                'agency_name': offers_info.get('offeredBy', {}).get('worksFor', {}).get('name', ''),
-                                'listing_url': offers_info.get('url', ''),
-                                'image_url': item.get('image', ''),
-                                'date_posted': item.get('datePosted', '')
-                            }
-            except Exception as e:
-                print(f"Error parsing JSON-LD: {e}")
-                continue
+        if not json_scripts:
+            return {}
         
-        return None
+        # Extract JSON-LD data
+        script = json_scripts[0]
+        json_data = json.loads(script.string)
+        graph_data = json_data.get('@graph', [])
+        
+        if not graph_data:
+            return {}
+        
+        property_information = graph_data[0]
+        final_info = dict()
+        final_info["listing_date"] = property_information.get("datePosted")
+        final_info["listing_name"] = property_information.get("name")
+        final_info["listing_image"] = property_information.get("image")
+
+        # Extract breadcrumb information to get Province, City, Suburb, ListingID
+        # Assuming Property 24 doesnt change its structure positions 2 - 4 are location specific
+        breadcrumb_list = property_information.get("breadcrumb", {}).get("itemListElement", [])
+        for breadcrumb_item in breadcrumb_list:
+            if breadcrumb_item.get("position") == 2:
+                final_info["province"] = breadcrumb_item.get("name")
+            elif breadcrumb_item.get("position") == 3:
+                final_info["city"] = breadcrumb_item.get("name")
+            elif breadcrumb_item.get("position") == 4:
+                final_info["suburb"] = breadcrumb_item.get("name")
+            elif breadcrumb_item.get("position") == 5:
+                listing_id = breadcrumb_item.get("name").split(":")[1].strip()
+                final_info["listing_id"] = listing_id
+        
+        # About information
+        about_info = property_information.get("about", {})
+        final_info["property_type"] = about_info.get("@type")
+        final_info["bedrooms"] = about_info.get("numberOfBedrooms")
+        final_info["bathrooms"] = about_info.get("numberOfBathroomsTotal")
+        final_info["floor_size"] = about_info.get("floorSize", {}).get("value")
+        final_info["allowed_pets"] = about_info.get("petsAllowed")
+        final_info["address"] = about_info.get("address", {}).get("streetAddress")
+        final_info["country"] = about_info.get("address", {}).get("addressCountry")
+        final_info["latitude"] = about_info.get("latitude")
+        final_info["longitude"] = about_info.get("longitude")
+
+        # Offer Information
+        offers_info = property_information.get("offers", {})
+        final_info["price"] = offers_info.get("priceSpecification", {}).get("price")
+        final_info["price_currency"] = offers_info.get("priceSpecification", {}).get("priceCurrency")
+        final_info["listing_organized_by"] = {
+            "name": offers_info.get("offeredBy", {}).get("name"),
+            "offered_by": offers_info.get("offeredBy", {}).get("@type"),
+            "agent_url": offers_info.get("offeredBy", {}).get("url"),
+            "works_for": {
+                "relation": offers_info.get("offeredBy", {}).get("worksFor", {}).get("@type"),
+                "name": offers_info.get("offeredBy", {}).get("worksFor", {}).get("name"),
+                "works_for_url": offers_info.get("offeredBy", {}).get("worksFor", {}).get("url")
+            }
+        }        
+        return final_info
     
-    def extract_amenities(self, soup: BeautifulSoup):
-        """Extract amenities and features from the page"""
-        all_text = soup.get_text().lower()
-        
-        amenity_keywords = {
-            'pool': ['pool', 'swimming'],
-            'security': ['security', '24-hour', 'access control', 'secure'],
-            'gym': ['gym', 'fitness', 'exercise'],
-            'parking': ['parking', 'garage', 'carport'],
-            'garden': ['garden', 'landscaped', 'outdoor space'],
-            'balcony': ['balcony', 'terrace', 'patio'],
-            'view': ['view', 'mountain view', 'sea view', 'city view'],
-            'kitchen': ['kitchen', 'modern kitchen', 'fitted kitchen'],
-            'laundry': ['laundry', 'washing'],
-            'elevator': ['elevator', 'lift'],
-            'air_conditioning': ['air conditioning', 'aircon', 'climate control'],
-            'fireplace': ['fireplace', 'braai']
-        }
-        
-        found_amenities = {}
-        for amenity, keywords in amenity_keywords.items():
-            for keyword in keywords:
-                if keyword in all_text:
-                    found_amenities[amenity] = True
-                    break
-        
-        return found_amenities
     
     def scrape_property24(self, url):
         """Enhanced Property24 scraper with all features"""
@@ -261,75 +216,12 @@ class PropertyScrapper:
                 property_data.update(json_data)
             
             # Extract detailed property overview data
-            property_data['property_overview'] = self.extract_property_overview(soup)
-            
-            # Extract room details
-            property_data['rooms_details'] = self.extract_rooms_details(soup)
-            
-            # Extract external features
-            property_data['external_features'] = self.extract_external_features(soup)
-            
-            # Extract points of interest
-            property_data['points_of_interest'] = self.extract_points_of_interest(soup)
+            property_data['property_overview'] = self.extract_property_overview(listing_number=property_data['listing_id'], soup=soup)
             
             # Extract key features from the main listing card
             property_data['key_features'] = self.extract_key_features(soup)
             
-            # Extract amenities (your original method)
-            property_data['amenities'] = self.extract_amenities(soup)
-            
-            # Fallback to HTML parsing for missing basic data
-            all_text = soup.get_text()
-            
-            # Extract price if not found in JSON-LD
-            if not property_data.get('price'):
-                price_matches = re.findall(r'R\\s*([\\d\\s,]+)', all_text)
-                for price in price_matches:
-                    clean_price = re.sub(r'\\s+', '', price).replace(',', '')
-                    if clean_price.isdigit() and len(clean_price) >= 6:
-                        property_data['price'] = clean_price
-                        break
-            
-            # Extract features if not found in JSON-LD
-            feature_patterns = {
-                'bedrooms': r'(\\d+)\\s*(?:bed|bedroom)',
-                'bathrooms': r'(\\d+)\\s*(?:bath|bathroom)', 
-                'parking': r'(\\d+)\\s*(?:parking|garage)',
-                'size': r'(\\d+)\\s*m²',
-            }
-            
-            for feature, pattern in feature_patterns.items():
-                if not property_data.get(feature):
-                    matches = re.findall(pattern, all_text, re.I)
-                    if matches:
-                        property_data[feature] = matches[0]
-            
-            # Extract agent details if not in JSON-LD
-            if not property_data.get('agent_name'):
-                agent_section = soup.find('div', class_='p24_agentDetails')
-                if agent_section:
-                    agent_text = agent_section.get_text()
-                    agent_lines = [line.strip() for line in agent_text.split('\\n') if line.strip()]
-                    for line in agent_lines:
-                        if len(line) > 3 and not line.isdigit() and 'show' not in line.lower():
-                            property_data['agent_name'] = line
-                            break
-            
-            # Extract property description from page content
-            if not property_data.get('description'):
-                desc_selectors = [
-                    'div[class*="description"]',
-                    'div[class*="content"]',
-                    'div[class*="detail"]'
-                ]
-                
-                for selector in desc_selectors:
-                    desc_elem = soup.select_one(selector)
-                    if desc_elem:
-                        desc_text = desc_elem.get_text().strip()
-                        if len(desc_text) > 50:
-                            property_data['description'] = desc_text[:500]
-                            break
+            print(json.dumps(property_data, indent=4))
             
             return property_data
             
@@ -455,10 +347,18 @@ if __name__ == "__main__":
     
     # Scrape the property
     result = scraper.scrape_property(test_url)
+    note_generator = PropertyNoteGenerator(property_location="Cape Town", note_name="test")
     
-    if result:
+    if not result:
         # Display results
-        scraper.display_results(result)
+        # scraper.display_results(result)
         
-    else:
-        print("❌ Failed to scrape property data")
+        # Generate Obsidian note
+        result = note_generator.generate_obsidian_note(property_data=result)
+        print("✅ Note generated successfully!")
+        # print(f"📁 Filename: {result['filename']}")
+        # print(f"📍 Location: {result['location']}")
+        # print()
+        # print("📝 GENERATED MARKDOWN:")
+        # print("=" * 60)
+        print(result['content'])
