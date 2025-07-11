@@ -21,7 +21,7 @@ class PropertyScrapper:
         text = re.sub(r'[²\u00b2]', '2', text)
         money_match = re.match(r'^R\s*([\d\s,]+)', text)
         if money_match:
-            text = money_match.group(1).replace(' ', '').replace(',', '')
+            text = float(money_match.group(1).replace(' ', '').replace(',', ''))
         return text
     
     def to_snake_case(self, text):
@@ -221,8 +221,6 @@ class PropertyScrapper:
             # Extract key features from the main listing card
             property_data['key_features'] = self.extract_key_features(soup)
             
-            print(json.dumps(property_data, indent=4))
-            
             return property_data
             
         except Exception as e:
@@ -349,16 +347,16 @@ if __name__ == "__main__":
     result = scraper.scrape_property(test_url)
     note_generator = PropertyNoteGenerator(property_location="Cape Town", note_name="test")
     
-    if not result:
+    if result:
         # Display results
         # scraper.display_results(result)
         
         # Generate Obsidian note
         result = note_generator.generate_obsidian_note(property_data=result)
         print("✅ Note generated successfully!")
-        # print(f"📁 Filename: {result['filename']}")
-        # print(f"📍 Location: {result['location']}")
-        # print()
-        # print("📝 GENERATED MARKDOWN:")
-        # print("=" * 60)
+        print(f"📁 Filename: {result['filename']}")
+        print(f"📍 Location: {result['location']}")
+        print()
+        print("📝 GENERATED MARKDOWN:")
+        print("=" * 60)
         print(result['content'])
