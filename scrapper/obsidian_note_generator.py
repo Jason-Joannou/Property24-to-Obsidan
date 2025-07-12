@@ -1,14 +1,29 @@
 import re
 import json
 from datetime import datetime
+from typing import Dict
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 class PropertyNoteGenerator:
 
     def __init__(self, property_location: str, note_name: str) -> None:
-        self.vault_directory = ""
-        self.property_directory = ""
+        self.vault_directory = os.getenv("VAULT_DIRECTORY")
+        self.property_directory = os.getenv("PROPERTY_DIRECTORY")
+        self.full_path = self._validate_vault_directory(os.path.join(self.vault_directory, self.property_directory))
         self.property_location = property_location
         self.note_name = note_name
+
+    def _validate_vault_directory(self, directory):
+        """Validate that vault directory exists"""
+        directory = os.path.normpath(directory)
+        print(f"Checking directory: {directory}")
+        if not os.path.exists(directory):
+            raise Exception(f"Vault directory {directory} does not exist. Please create it and try again.")
+        return directory
 
     def format_currency(self, amount):
         """Format number as currency"""
@@ -71,7 +86,8 @@ class PropertyNoteGenerator:
         security_setup = price * 0.005
         immediate_repairs = price * 0.01  # 1%
 
-        total_once_off = deposit + transfer_duty + bond_registration + transfer_costs + attorney_fees + bond_origination + moving_costs + security_setup + immediate_repairs
+        additioanl_total_once_off_costs = deposit + transfer_duty + bond_registration + transfer_costs + attorney_fees + bond_origination + moving_costs + security_setup + immediate_repairs
+        grand_total = price + additioanl_total_once_off_costs
 
         return {
             'deposit': deposit,
@@ -83,7 +99,8 @@ class PropertyNoteGenerator:
             'moving_costs': moving_costs,
             'security_setup': security_setup,
             'immediate_repairs': immediate_repairs,
-            'total_once_off': total_once_off
+            'additional_total_once_off': additioanl_total_once_off_costs,
+            'grand_total': grand_total
         }
 
     def calculate_monthly_costs(self, bond_amount, levies, rates_taxes, price):
@@ -150,22 +167,14 @@ class PropertyNoteGenerator:
     def generate_filename(self, property_data):
         """Generate a clean filename for the property"""
         # Use listing_name if available, otherwise construct from address
-        title = property_data.get('listing_name', 'Property')
-        address = property_data.get('address', '')
-        suburb = property_data.get('suburb', '')
+        suburb = property_data.get('suburb', 'property').lower()
         listing_id = property_data.get('listing_id', '')
         
-        # Use listing_name as base, clean it up
-        base_name = title
-        
-        # Clean the filename
-        filename = re.sub(r'[^a-zA-Z0-9\\\\s]', '', base_name)
-        filename = re.sub(r'\\\\s+', '_', filename.strip())
-        filename = filename[:50]  # Limit length
-        
-        # Add listing ID for uniqueness
         if listing_id:
-            filename = f"{filename}_{listing_id}"
+            filename = f"{suburb}_{listing_id}"
+        else:
+            timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+            filename = f"{suburb}_{timestamp}"
         
         return f"{filename}.md"
     
@@ -228,8 +237,9 @@ tags:
   - property
   - portfolio
 cssclasses:
-  - page-manila
-  - pen-black
+  - page-grid
+  - pen-blue
+  - page-white
 property_type: {property_data.get('property_type', '')}
 status: interested
 source: {property_data.get('source', 'Property24')}
@@ -251,7 +261,7 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 | Field | Value |
 |-------|-------|
 | **Address** | {property_data.get('address', 'N/A')} |
-| **Suburb** | [[{property_data.get('suburb', 'N/A')}]] |
+| **Suburb** | {property_data.get('suburb', 'N/A')} |
 | **City** | {property_data.get('city', 'N/A')} |
 | **Province** | {property_data.get('province', 'N/A')} |
 | **Property Type** | {property_data.get('property_type', 'N/A')} |
@@ -275,7 +285,8 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 | **Moving Costs** | {self.format_currency(once_off_costs['moving_costs'])} |
 | **Security Setup** | {self.format_currency(once_off_costs['security_setup'])} |
 | **Immediate Repairs** | {self.format_currency(once_off_costs['immediate_repairs'])} |
-| **Total Purchase Cost** | {self.format_currency(once_off_costs['total_once_off'])} |
+| **Total Additional Once Off Cost** | {self.format_currency(once_off_costs['additional_total_once_off'])} |
+| **Grand Total Once Off Cost** | {self.format_currency(once_off_costs['grand_total'])} |
 
 ### Bond Calculations
 
@@ -304,7 +315,7 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 
 | Metric | Value |
 |--------|-------|
-| **Price per m²** | R{property_overview.get('price_per_m2', 'N/A')} |
+| **Price per m2** | {self.format_currency(property_overview.get('price_per_m2', None))} |
 | **Transfer Duty Exempt** | {property_overview.get('no_transfer_duty', 'N/A')} |
 | **Break-even Rental** | {self.format_currency(total_monthly_costs['total_monthly'])} |
 
@@ -335,7 +346,7 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 
 | Specification | Value |
 |---------------|-------|
-| **Floor Size** | {property_data.get('floor_size', 'N/A')} m² |
+| **Floor Size** | {property_data.get('floor_size', 'N/A')} m2 |
 | **Erf Size** | {property_overview.get('erf_size', 'N/A')} |
 | **Levies** | {self.format_currency(levies)} |
 | **Rates & Taxes** | {self.format_currency(rates_taxes)} |
@@ -432,3 +443,27 @@ bathrooms: {property_data.get('bathrooms', 'null')}
                 'suburb': property_data.get('suburb', None)
             }
         }
+    
+    def save_note_to_obsidian(self, note_data: Dict):
+        """Save note data to a new note in the specified directory"""
+        property_geography = note_data['geography']
+        province = property_geography['province']
+        city = property_geography['city']
+        suburb = property_geography['suburb']
+
+        if not province:
+            property_folder = "Other"
+        elif not city:
+            property_folder = province
+        elif not suburb:
+            property_folder = os.path.join(province, city)
+        else:
+            property_folder = os.path.join(province, city, suburb)
+
+        property_directory = os.path.join(self.full_path, property_folder)
+        os.makedirs(property_directory, exist_ok=True)
+
+        filepath = os.path.join(property_directory, note_data['filename'])
+        with open(filepath, 'w', encoding='utf-8') as f:
+            f.write(note_data['content'])
+        
