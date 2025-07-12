@@ -397,11 +397,13 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 ## Viewing & Assessment
 
 ### Viewing Details
+
 - **Viewing Date**: 
 - **Viewing Time**: 
 - **Viewing Notes**: 
 
 ### Property Assessment
+
 - **Overall Condition**: 
 - **Score (1-10)**: 
 - **Pros**: 
@@ -410,6 +412,7 @@ bathrooms: {property_data.get('bathrooms', 'null')}
   - 
 
 ### Decision
+
 - **Status**: 
 - **Decision**: 
 - **Reason**: 
@@ -418,6 +421,7 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 ## Documents & Links
 
 ### Required Documents
+
 - [ ] Title Deed
 - [ ] Rates Certificate  
 - [ ] Electrical Certificate
@@ -426,10 +430,12 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 - [ ] Body Corporate Rules (if applicable)
 
 ### Links
+
 - **Property Listing**: [View on Property24]({property_data.get('url', '')})
 - **Property Images**: [View Images]({property_data.get('listing_image', '')})
 
 ---
+
 *Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}*  
 *Scraped from: {property_data.get('source', 'N/A')} on {property_data.get('scraped_date', 'N/A')}*
 """
