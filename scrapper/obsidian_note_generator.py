@@ -57,6 +57,62 @@ class PropertyNoteGenerator:
         else:
             return 1241456 + (price_num - 13310000) * 0.13
         
+    def calculate_once_off_costs(self, price):
+        """Estimate once-off costs as % of purchase price or loan amount"""
+        deposit = price * 0.10
+        transfer_duty = self.calculate_transfer_duty(price)
+        bond_amount = price - deposit
+
+        bond_registration = bond_amount * 0.01
+        transfer_costs = price * 0.01
+        attorney_fees = price * 0.005
+        bond_origination = bond_amount * 0.005
+        moving_costs = price * 0.002
+        security_setup = price * 0.005
+        immediate_repairs = price * 0.01  # 1%
+
+        total_once_off = deposit + transfer_duty + bond_registration + transfer_costs + attorney_fees + bond_origination + moving_costs + security_setup + immediate_repairs
+
+        return {
+            'deposit': deposit,
+            'transfer_duty': transfer_duty,
+            'bond_registration': bond_registration,
+            'transfer_costs': transfer_costs,
+            'attorney_fees': attorney_fees,
+            'bond_origination': bond_origination,
+            'moving_costs': moving_costs,
+            'security_setup': security_setup,
+            'immediate_repairs': immediate_repairs,
+            'total_once_off': total_once_off
+        }
+
+    def calculate_monthly_costs(self, bond_amount, levies, rates_taxes, price):
+        """Estimate total monthly costs with scalable percentages"""
+
+        monthly_payment = self.calculate_bond_payment(bond_amount)
+        insurance = (bond_amount * 0.003) / 12  # ~0.3% annually
+        maintenance = (price * 0.01) / 12       # ~1% annually
+
+        # Utilities: estimate at 0.1% of property price per month, capped between R1500-R3500
+        utilities = max(1500, min(price * 0.001, 3500))
+
+        # Security: estimate at 0.02% of property price per month, capped between R300-R800
+        security = max(300, min(price * 0.0002, 800))
+
+        total_monthly = monthly_payment + levies + rates_taxes + insurance + maintenance + utilities + security
+
+        return {
+            'bond_payment': monthly_payment,
+            'levies': levies,
+            'rates_taxes': rates_taxes,
+            'insurance': insurance,
+            'maintenance': maintenance,
+            'utilities': utilities,
+            'security': security,
+            'total_monthly': total_monthly
+        }
+
+        
     def generate_amenities_frontmatter(self, key_features):
         """Generate amenities section for frontmatter from key_features"""
         amenities_yaml = ""
@@ -142,19 +198,22 @@ class PropertyNoteGenerator:
         agent_info = property_data.get('listing_organized_by', {})
         
         # Calculate financials
-        transfer_duty = self.calculate_transfer_duty(price)
         deposit = price * 0.1
         bond_amount = price - deposit
-        monthly_payment = self.calculate_bond_payment(bond_amount)
         
         # Get monthly costs from property overview
         levies = self.extract_numeric_value(property_overview.get('levies', '0'))
         rates_taxes = self.extract_numeric_value(property_overview.get('rates_and_taxes', '0'))
         
         # Estimated additional costs
-        insurance = 800
-        maintenance = 1000
-        total_monthly_cost = monthly_payment + levies + rates_taxes + insurance + maintenance
+        once_off_costs = self.calculate_once_off_costs(price)
+        total_monthly_costs = self.calculate_monthly_costs(
+            bond_amount=bond_amount,
+            levies=levies,
+            rates_taxes=rates_taxes,
+            price=price
+        )
+        
         
         # Generate filename
         filename = self.generate_filename(property_data)
@@ -207,12 +266,16 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 | Item | Amount |
 |------|--------|
 | **Purchase Price** | {self.format_currency(price)} |
-| **Transfer Duty** | {self.format_currency(transfer_duty)} |
-| **Bond Registration** | R8,000 (est.) |
-| **Transfer Costs** | R15,000 (est.) |
-| **Attorney Fees** | R12,000 (est.) |
-| **Bond Origination** | R6,000 (est.) |
-| **Total Purchase Cost** | {self.format_currency(price + transfer_duty + 41000)} |
+| **Deposit (10%)** | {self.format_currency(once_off_costs['deposit'])} |
+| **Transfer Duty** | {self.format_currency(once_off_costs['transfer_duty'])} |
+| **Bond Registration** | {self.format_currency(once_off_costs['bond_registration'])} |
+| **Transfer Costs** | {self.format_currency(once_off_costs['transfer_costs'])} |
+| **Attorney Fees** | {self.format_currency(once_off_costs['attorney_fees'])} |
+| **Bond Origination** | {self.format_currency(once_off_costs['bond_origination'])} |
+| **Moving Costs** | {self.format_currency(once_off_costs['moving_costs'])} |
+| **Security Setup** | {self.format_currency(once_off_costs['security_setup'])} |
+| **Immediate Repairs** | {self.format_currency(once_off_costs['immediate_repairs'])} |
+| **Total Purchase Cost** | {self.format_currency(once_off_costs['total_once_off'])} |
 
 ### Bond Calculations
 
@@ -220,20 +283,22 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 |------|--------|
 | **Deposit (10%)** | {self.format_currency(deposit)} |
 | **Bond Amount** | {self.format_currency(bond_amount)} |
-| **Interest Rate** | 11.75% (prime) |
+| **Interest Rate** | 10.75% (prime) |
 | **Bond Term** | 20 years |
-| **Monthly Payment** | {self.format_currency(monthly_payment)} |
+| **Monthly Payment** | {self.format_currency(total_monthly_costs['bond_payment'])} |
 
 ### Monthly Costs
 
 | Item | Amount |
 |------|--------|
-| **Bond Payment** | {self.format_currency(monthly_payment)} |
-| **Levies** | {self.format_currency(levies)} |
-| **Rates & Taxes** | {self.format_currency(rates_taxes)} |
-| **Insurance** | {self.format_currency(insurance)} (est.) |
-| **Maintenance** | {self.format_currency(maintenance)} (est.) |
-| **Total Monthly** | {self.format_currency(total_monthly_cost)} |
+| **Bond Payment** | {self.format_currency(total_monthly_costs['bond_payment'])} |
+| **Levies** | {self.format_currency(total_monthly_costs['levies'])} |
+| **Rates & Taxes** | {self.format_currency(total_monthly_costs['rates_taxes'])} |
+| **Insurance** | {self.format_currency(total_monthly_costs['insurance'])} |
+| **Maintenance** | {self.format_currency(total_monthly_costs['maintenance'])} |
+| **Utilities** | {self.format_currency(total_monthly_costs['utilities'])} |
+| **Security** | {self.format_currency(total_monthly_costs['security'])} |
+| **Total Monthly** | {self.format_currency(total_monthly_costs['total_monthly'])} |
 
 ### Investment Metrics
 
@@ -241,7 +306,7 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 |--------|-------|
 | **Price per m²** | R{property_overview.get('price_per_m2', 'N/A')} |
 | **Transfer Duty Exempt** | {property_overview.get('no_transfer_duty', 'N/A')} |
-| **Break-even Rental** | {self.format_currency(total_monthly_cost)} |
+| **Break-even Rental** | {self.format_currency(total_monthly_costs['total_monthly'])} |
 
 ## Property Features
 
@@ -294,7 +359,7 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 
         note_content += f"""
 
-## 📍 Points of Interest
+## Points of Interest
 """
         
         # Add points of interest
@@ -309,7 +374,7 @@ bathrooms: {property_data.get('bathrooms', 'null')}
 
         note_content += f"""
 
-## 👤 Agent Information
+## Agent Information
 
 | Field | Value |
 |-------|-------|
@@ -367,6 +432,6 @@ bathrooms: {property_data.get('bathrooms', 'null')}
                 'location': property_data.get('suburb', 'Unknown'),
                 'bedrooms': property_data.get('bedrooms', 'N/A'),
                 'bathrooms': property_data.get('bathrooms', 'N/A'),
-                'monthly_cost': int(total_monthly_cost)
+                'monthly_cost': int(total_monthly_costs['total_monthly'])
             }
         }
