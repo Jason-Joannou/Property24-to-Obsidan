@@ -78,7 +78,7 @@ class PropertyNoteGenerator:
         
         return amenities_yaml.strip()
             
-    def calculate_bond_payment(self, principal, rate=0.1175, years=20):
+    def calculate_bond_payment(self, principal, rate=0.1075, years=20):
         """Calculate monthly bond payment"""
         if not principal or principal <= 0:
             return 0
