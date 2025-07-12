@@ -426,12 +426,9 @@ bathrooms: {property_data.get('bathrooms', 'null')}
         return {
             'filename': filename,
             'content': note_content,
-            'location': property_data.get('suburb', 'Unknown'),
-            'metadata': {
-                'price': price,
-                'location': property_data.get('suburb', 'Unknown'),
-                'bedrooms': property_data.get('bedrooms', 'N/A'),
-                'bathrooms': property_data.get('bathrooms', 'N/A'),
-                'monthly_cost': int(total_monthly_costs['total_monthly'])
+            'geography': {
+                'province': property_data.get('province', None),
+                'city': property_data.get('city', None),
+                'suburb': property_data.get('suburb', None)
             }
         }
