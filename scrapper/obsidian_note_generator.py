@@ -18,7 +18,14 @@ class PropertyNoteGenerator:
         self.note_name = note_name
 
     def _validate_vault_directory(self, directory):
-        """Validate that vault directory exists"""
+        """Validates the vault directory and raises an exception if it does not exist
+
+        Args:
+            directory (str): The vault directory to validate
+
+        Returns:
+            str: The validated vault directory
+        """
         directory = os.path.normpath(directory)
         print(f"Checking directory: {directory}")
         if not os.path.exists(directory):
@@ -26,13 +33,19 @@ class PropertyNoteGenerator:
         return directory
 
     def format_currency(self, amount):
-        """Format number as currency"""
+        """Formats a currency amount for display in a note
+    
+        Args:
+            amount (Union[str, int, float]): The amount to format
+    
+        Returns:
+            str: The formatted amount, e.g. "R27,000"
+        """
         if not amount:
             return "R0"
         
         # Handle string amounts like "R 27 000"
         if isinstance(amount, str):
-            # Extract numbers from string
             numbers = re.findall(r'[\\\\d,]+', amount.replace(' ', ''))
             if numbers:
                 clean_amount = numbers[0].replace(',', '')
@@ -40,20 +53,27 @@ class PropertyNoteGenerator:
                     return f"R{int(clean_amount):,}"
             return amount
         
-        # Handle numeric amounts
         if isinstance(amount, (int, float)):
             return f"R{int(amount):,}"
         
         return str(amount)
     
-    def safe_string(self, value):
-        """Make string safe for YAML frontmatter"""
-        if not value:
-            return ""
-        return str(value).replace('"', "'").replace('\\\\n', ' ').strip()
     
     def calculate_transfer_duty(self, price):
-        """Calculate South African transfer duty"""
+        """
+        Calculate the transfer duty based on the property price.
+
+        The transfer duty is calculated using a tiered system where different
+        portions of the property's price are taxed at different rates.
+
+        Args:
+            price (Union[str, int]): The price of the property.
+
+        Returns:
+            float: The calculated transfer duty. Returns 0 if the price is invalid
+            or below the minimum threshold for transfer duty.
+        """
+
         if not price or not str(price).replace(',', '').isdigit():
             return 0
         
@@ -73,7 +93,16 @@ class PropertyNoteGenerator:
             return 1241456 + (price_num - 13310000) * 0.13
         
     def calculate_once_off_costs(self, price):
-        """Estimate once-off costs as % of purchase price or loan amount"""
+        """Calculate all the once-off costs associated with buying a property
+
+        This includes the deposit, transfer duty, bond registration, transfer costs, attorney fees, bond origination, moving costs, security setup, and immediate repairs.
+
+        Args:
+            price (int): The price of the property
+
+        Returns:
+            dict: A dictionary containing all the calculated costs
+        """
         deposit = price * 0.10
         transfer_duty = self.calculate_transfer_duty(price)
         bond_amount = price - deposit
@@ -104,7 +133,29 @@ class PropertyNoteGenerator:
         }
 
     def calculate_monthly_costs(self, bond_amount, levies, rates_taxes, price):
-        """Estimate total monthly costs with scalable percentages"""
+        """
+        Calculate the monthly costs associated with owning a property.
+
+        This includes the bond payment, levies, rates and taxes, insurance, maintenance, utilities, 
+        and security costs. Estimates for utilities and security are capped within specified ranges.
+
+        Args:
+            bond_amount (float): The outstanding bond amount.
+            levies (float): The monthly levies for the property.
+            rates_taxes (float): The monthly rates and taxes for the property.
+            price (float): The purchase price of the property.
+
+        Returns:
+            dict: A dictionary containing detailed breakdown of monthly costs, including:
+                - 'bond_payment': Monthly bond payment.
+                - 'levies': Monthly levies.
+                - 'rates_taxes': Monthly rates and taxes.
+                - 'insurance': Monthly insurance cost.
+                - 'maintenance': Monthly maintenance cost.
+                - 'utilities': Estimated monthly utilities cost.
+                - 'security': Estimated monthly security cost.
+                - 'total_monthly': Total monthly cost including all components.
+        """
 
         monthly_payment = self.calculate_bond_payment(bond_amount)
         insurance = (bond_amount * 0.003) / 12  # ~0.3% annually
@@ -131,19 +182,24 @@ class PropertyNoteGenerator:
 
         
     def generate_amenities_frontmatter(self, key_features):
-        """Generate amenities section for frontmatter from key_features"""
+        """
+        Generate YAML frontmatter for amenities based on key_features.
+
+        Args:
+            key_features (dict): The key features extracted from the property listing.
+
+        Returns:
+            str: YAML frontmatter for amenities.
+        """
         amenities_yaml = ""
         
-        # Combine amenities from both sources
-        all_amenities = set()  # Use set to avoid duplicates
+        all_amenities = set()
         
-        # Add amenities from text analysis
         if key_features:
             for amenity, present in key_features.items():
                 if present:
                     all_amenities.add(amenity)
         
-        # Generate YAML list for amenities
         if all_amenities:
             amenities_yaml = "amenities:\n"
             for amenity in sorted(all_amenities):
@@ -152,7 +208,17 @@ class PropertyNoteGenerator:
         return amenities_yaml.strip()
             
     def calculate_bond_payment(self, principal, rate=0.1075, years=20):
-        """Calculate monthly bond payment"""
+        """
+        Calculate the monthly bond payment for a given principal amount, interest rate, and repayment term.
+
+        Args:
+            principal (float): The outstanding bond amount.
+            rate (float, optional): The interest rate as a decimal. Defaults to 0.1075 (10.75%).
+            years (int, optional): The repayment term in years. Defaults to 20.
+
+        Returns:
+            float: The monthly bond payment amount.
+        """
         if not principal or principal <= 0:
             return 0
         
@@ -165,8 +231,18 @@ class PropertyNoteGenerator:
         return principal * (monthly_rate * (1 + monthly_rate)**num_payments) / ((1 + monthly_rate)**num_payments - 1)
     
     def generate_filename(self, property_data):
-        """Generate a clean filename for the property"""
-        # Use listing_name if available, otherwise construct from address
+        """
+        Generate a filename for the Obsidian note based on the property data
+
+        Uses the suburb and listing ID to create a unique filename. If no listing
+        ID is provided, uses the current timestamp instead.
+
+        Args:
+            property_data (dict): The property data to generate a filename for
+
+        Returns:
+            str: The generated filename
+        """
         suburb = property_data.get('suburb', 'property').lower()
         listing_id = property_data.get('listing_id', '')
         
@@ -190,7 +266,16 @@ class PropertyNoteGenerator:
         return value
     
     def generate_obsidian_note(self, property_data):
-        """Generate comprehensive Obsidian note from scraped property data"""
+        """
+        Generate an Obsidian note for a given property data.
+
+        Args:
+            property_data (dict): The property data to generate a note for.
+
+        Returns:
+            dict: A dictionary containing the filename, content, and geography data for the generated note.
+        """
+    
         if not property_data:
             return None
         
