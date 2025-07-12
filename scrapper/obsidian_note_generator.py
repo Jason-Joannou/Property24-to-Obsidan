@@ -44,16 +44,18 @@ class PropertyNoteGenerator:
         
         price_num = int(str(price).replace(',', ''))
         
-        if price_num <= 1000000:
+        if price_num <= 1210000:
             return 0
-        elif price_num <= 1375000:
-            return (price_num - 1000000) * 0.03
-        elif price_num <= 1925000:
-            return 11250 + (price_num - 1375000) * 0.06
-        elif price_num <= 2475000:
-            return 44250 + (price_num - 1925000) * 0.08
+        elif price_num <= 1663800:
+            return (price_num - 1210000) * 0.03
+        elif price_num <= 2329300:
+            return 13614 + (price_num - 1663800) * 0.06
+        elif price_num <= 2994800:
+            return 53544 + (price_num - 2329300) * 0.08
+        elif price_num <= 13310000:
+            return 106784 + (price_num - 2994800) * 0.11
         else:
-            return 88250 + (price_num - 2475000) * 0.11
+            return 1241456 + (price_num - 13310000) * 0.13
         
     def generate_amenities_frontmatter(self, key_features):
         """Generate amenities section for frontmatter from key_features"""
