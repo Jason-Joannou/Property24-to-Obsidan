@@ -10,12 +10,10 @@ load_dotenv()
 
 class PropertyNoteGenerator:
 
-    def __init__(self, property_location: str, note_name: str) -> None:
+    def __init__(self) -> None:
         self.vault_directory = os.getenv("VAULT_DIRECTORY")
         self.property_directory = os.getenv("PROPERTY_DIRECTORY")
         self.full_path = self._validate_vault_directory(os.path.join(self.vault_directory, self.property_directory))
-        self.property_location = property_location
-        self.note_name = note_name
 
     def _validate_vault_directory(self, directory):
         """Validates the vault directory and raises an exception if it does not exist

@@ -13,7 +13,16 @@ class PropertyScrapper:
         }
 
     def clean_text(self, text):
-        """Clean and normalize text"""
+        """
+        Clean a string of text by stripping, replacing multiple spaces with a single space, and replacing squared symbols with '2'.
+        If the string matches the pattern of a currency value (e.g., "R  1 234 567"), convert it to a float by removing spaces and commas.
+
+        Args:
+            text (str): The string to clean
+
+        Returns:
+            str or float: The cleaned string or a float if the input matched a currency pattern
+        """
         if not text:
             return ""
         text = text.strip()
@@ -25,12 +34,23 @@ class PropertyScrapper:
         return text
     
     def to_snake_case(self, text):
+        """
+        Convert a string to snake_case.
+
+        Removes leading/trailing spaces, replaces spaces with underscores, and lowercases the string.
+        Additionally, removes non-word characters except underscores.
+
+        Args:
+            text (str): The string to convert to snake_case
+
+        Returns:
+            str: The input string converted to snake_case
+        """
         if not text:
             return ""
-        # Remove leading/trailing spaces, replace spaces with underscores, and lowercase
         text = text.strip()
-        text = re.sub(r'\s+', '_', text)  # Replace spaces (or multiple spaces) with _
-        text = re.sub(r'[^\w_]', '', text)  # Remove non-word characters except underscore
+        text = re.sub(r'\s+', '_', text)
+        text = re.sub(r'[^\w_]', '', text)
         return text.lower()
     
     def extract_number(self, text):
@@ -41,7 +61,19 @@ class PropertyScrapper:
         return numbers[0].replace(',', '') if numbers else ""
     
     def extract_property_overview(self, listing_number: str, soup: BeautifulSoup):
-        """Extract detailed property overview data from the accordion section"""
+        """
+        Extract property overview data from the given listing number and soup.
+
+        Extracts the points of interest data from the AJAX call to the points of interest URL.
+
+        Args:
+            listing_number (str): The listing number to extract data for
+            soup (BeautifulSoup): The parsed HTML of the listing page
+
+        Returns:
+            dict: The extracted data, with keys as the panel headings and values as the extracted data
+        """
+
         overview_data = {}
         poi_url = f"https://www.property24.com/ListingReadOnly/PointsOfInterestForListing?ListingNumber={listing_number}"
         
@@ -103,8 +135,24 @@ class PropertyScrapper:
         return overview_data
     
     
-    def extract_key_features(self, soup: BeautifulSoup):
-        """Extract key features from the p24_keyFeaturesContainer section"""
+    def extract_key_features(self, soup: BeautifulSoup):        
+        """
+        Extract key features from the BeautifulSoup object of the property listing page.
+
+        This function looks for specific containers within the page that hold key features
+        such as "Bedrooms", "Bathrooms", or amenities like "Pet Friendly", and extracts their
+        names and corresponding values. If a feature does not have a specified amount, it is
+        assumed to be a boolean feature and is set to True.
+
+        Args:
+            soup (BeautifulSoup): The BeautifulSoup object containing the parsed HTML of the
+                                property listing page.
+
+        Returns:
+            dict: A dictionary of key features with their names converted to snake_case as keys.
+                The values are either the extracted feature amount or True for boolean features.
+        """
+
         key_features = {}
         
         # Find the key features containers
@@ -133,7 +181,46 @@ class PropertyScrapper:
         return key_features
     
     def extract_from_json_ld(self, soup: BeautifulSoup):
-        """Extract data from JSON-LD structured data"""
+        """
+        Extract data from JSON-LD information in the property listing page.
+        
+        The JSON-LD data is located in a script tag with type 'application/ld+json'.
+        The data is extracted and restructured into a dictionary with the following keys:
+        
+        * listing_date: The date the listing was posted.
+        * listing_name: The name of the listing.
+        * listing_image: The URL of the main image of the listing.
+        * province: The province of the property.
+        * city: The city of the property.
+        * suburb: The suburb of the property.
+        * listing_id: The ID of the listing.
+        * property_type: The type of property (e.g. "Apartment", "House", etc.).
+        * bedrooms: The number of bedrooms.
+        * bathrooms: The number of bathrooms.
+        * floor_size: The floor size of the property.
+        * allowed_pets: Whether pets are allowed.
+        * address: The street address of the property.
+        * country: The country of the property.
+        * latitude: The latitude of the property.
+        * longitude: The longitude of the property.
+        * price: The price of the property.
+        * price_currency: The currency of the price.
+        * listing_organized_by: A dictionary containing information about the agent who is
+            listing the property. The dictionary contains the following keys:
+            
+            * name: The name of the agent.
+            * offered_by: The type of the agent (e.g. "Person", "Organization", etc.).
+            * agent_url: The URL of the agent's website.
+            * works_for: A dictionary containing information about the agency the agent works
+                for. The dictionary contains the following keys:
+                
+                * relation: The type of the relation between the agent and the agency.
+                * name: The name of the agency.
+                * works_for_url: The URL of the agency's website.
+        
+        Returns:
+            dict: A dictionary containing the extracted data.
+        """
         json_scripts = soup.find_all('script', type='application/ld+json')
         
         if not json_scripts:
@@ -197,7 +284,41 @@ class PropertyScrapper:
     
     
     def scrape_property24(self, url):
-        """Enhanced Property24 scraper with all features"""
+        """
+        Scrape a Property24 listing page and return the scraped data in a dictionary
+
+        Args:
+            url (str): The URL of the Property24 listing page to scrape
+
+        Returns:
+            dict: A dictionary containing the scraped data, with the following keys:
+
+                - url (str): The URL of the scraped page
+                - source (str): The source of the scraped data (Property24)
+                - scraped_date (str): The date and time the page was scraped, in ISO 8601 format
+                - listing_id (str): The Property24 listing ID
+                - listing_name (str): The name of the listing
+                - listing_image (str): The URL of the main listing image
+                - province (str): The province the listing is in
+                - city (str): The city the listing is in
+                - suburb (str): The suburb the listing is in
+                - property_type (str): The type of property (e.g. House, Apartment, etc.)
+                - bedrooms (int): The number of bedrooms in the property
+                - bathrooms (int): The number of bathrooms in the property
+                - floor_size (int): The floor size of the property in square meters
+                - allowed_pets (bool): Whether pets are allowed in the property
+                - address (str): The full address of the property
+                - latitude (float): The latitude of the property
+                - longitude (float): The longitude of the property
+                - price (int): The price of the property in Rands
+                - price_currency (str): The currency of the price (ZAR)
+                - listing_organized_by (dict): A dictionary containing information about the agent/agency organizing the listing
+                - property_overview (dict): A dictionary containing detailed information about the property
+                - key_features (list): A list of key features of the property
+
+        Raises:
+            Exception: If there is an error scraping the page
+        """
         try:
             response = requests.get(url, headers=self.headers)
             response.raise_for_status()
@@ -228,32 +349,37 @@ class PropertyScrapper:
             return None
     
     def scrape_property(self, url):
-        """Main scraping method"""
+        """
+        Scrape a property listing page from the given URL.
+
+        Currently only supports Property24 URLs.
+
+        Args:
+            url (str): The URL of the property listing page to scrape
+
+        Returns:
+            dict: A dictionary containing the scraped data, or None if the URL is not supported
+        """
         if 'property24' in url.lower():
             return self.scrape_property24(url)
         else:
             print("Currently only Property24 URLs are supported")
             return None
     
-# Example usage and testing
 if __name__ == "__main__":
-    # Initialize scraper
     scraper = PropertyScrapper()
     
     # Test URL
     test_url = "https://www.property24.com/for-sale/zonnebloem/cape-town/western-cape/10166/114098915?plId=2083948&plt=3&plsIds=2111336"
     
-    print("🚀 Testing Complete Property Scraper")
+    print("Testing Property Scraper")
     print(f"URL: {test_url}")
     print()
     
-    # Scrape the property
     result = scraper.scrape_property(test_url)
-    note_generator = PropertyNoteGenerator(property_location="Cape Town", note_name="test")
+    note_generator = PropertyNoteGenerator()
     
     if result:
-        # Display results
-        # scraper.display_results(result)
         
         # Generate Obsidian note
         result = note_generator.generate_obsidian_note(property_data=result)
