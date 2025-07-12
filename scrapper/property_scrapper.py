@@ -235,102 +235,6 @@ class PropertyScrapper:
             print("Currently only Property24 URLs are supported")
             return None
     
-    def display_results(self, data):
-        """Display scraped results in a comprehensive format"""
-        if not data:
-            print("❌ No data to display")
-            return
-        
-        print("🏠 COMPLETE PROPERTY SCRAPING RESULTS")
-        print("=" * 70)
-        
-        # Basic Information
-        print("📋 BASIC INFORMATION:")
-        print(f"  Title: {data.get('title', 'N/A')}")
-        print(f"  Property Type: {data.get('property_type', 'N/A')}")
-        print(f"  Address: {data.get('address', 'N/A')}")
-        print(f"  Area: {data.get('area', 'N/A')}")
-        print(f"  Province: {data.get('province', 'N/A')}")
-        
-        # Financial Information
-        print(f"\\n💰 FINANCIAL INFORMATION:")
-        price = data.get('price', '0')
-        if price and price.isdigit():
-            print(f"  Price: R{int(price):,} {data.get('currency', '')}")
-        else:
-            print(f"  Price: {price}")
-        print(f"  Date Posted: {data.get('date_posted', 'N/A')}")
-        
-        # Property Overview Details
-        overview = data.get('property_overview', {})
-        if overview:
-            print(f"\\n📊 PROPERTY OVERVIEW:")
-            for key, value in overview.items():
-                print(f"  {key.replace('_', ' ').title()}: {value}")
-        
-        # Key Features (from the main card)
-        key_features = data.get('key_features', {})
-        if key_features:
-            print(f"\\n🔑 KEY FEATURES:")
-            for feature, value in key_features.items():
-                if isinstance(value, bool):
-                    print(f"  ✓ {feature.replace('_', ' ').title()}")
-                else:
-                    print(f"  {feature.replace('_', ' ').title()}: {value}")
-        
-        # Amenities (from text analysis)
-        amenities = data.get('amenities', {})
-        if amenities:
-            print(f"\\n🏢 AMENITIES (detected from text):")
-            for amenity, present in amenities.items():
-                if present:
-                    print(f"  ✓ {amenity.replace('_', ' ').title()}")
-        
-        # Room Details
-        rooms = data.get('rooms_details', {})
-        if rooms:
-            print(f"\\n🏠 ROOM DETAILS:")
-            for key, value in rooms.items():
-                if isinstance(value, list):
-                    print(f"  {key.replace('_', ' ').title()}: {', '.join(value)}")
-                else:
-                    print(f"  {key.replace('_', ' ').title()}: {value}")
-        
-        # External Features
-        external = data.get('external_features', {})
-        if external:
-            print(f"\\n🌳 EXTERNAL FEATURES:")
-            for key, value in external.items():
-                print(f"  {key.replace('_', ' ').title()}: {value}")
-        
-        # Points of Interest (show summary)
-        poi = data.get('points_of_interest', {})
-        if poi:
-            print(f"\\n📍 POINTS OF INTEREST:")
-            for category, items in poi.items():
-                print(f"  {category.replace('_', ' ').title()}: {len(items)} items")
-                for item in items[:2]:  # Show first 2 items
-                    print(f"    • {item['name']} ({item['distance']})")
-                if len(items) > 2:
-                    print(f"    ... and {len(items) - 2} more")
-        
-        # Agent Information
-        print(f"\\n👤 AGENT INFORMATION:")
-        print(f"  Agent Name: {data.get('agent_name', 'N/A')}")
-        print(f"  Agency: {data.get('agency_name', 'N/A')}")
-        
-        # Description
-        description = data.get('description', '')
-        if description:
-            print(f"\\n📝 DESCRIPTION:")
-            print(f"  {description[:200]}{'...' if len(description) > 200 else ''}")
-        
-        print(f"\\n📊 METADATA:")
-        print(f"  Source: {data.get('source', 'N/A')}")
-        print(f"  Scraped: {data.get('scraped_date', 'N/A')}")
-        
-        print("\\n" + "="*70)
-
 # Example usage and testing
 if __name__ == "__main__":
     # Initialize scraper
@@ -353,10 +257,4 @@ if __name__ == "__main__":
         
         # Generate Obsidian note
         result = note_generator.generate_obsidian_note(property_data=result)
-        print("✅ Note generated successfully!")
-        print(f"📁 Filename: {result['filename']}")
-        print(f"📍 Location: {result['location']}")
-        print()
-        print("📝 GENERATED MARKDOWN:")
-        print("=" * 60)
-        print(result['content'])
+        note_generator.save_note_to_obsidian(note_data=result)
