@@ -320,7 +320,7 @@ class PropertyScrapper:
             Exception: If there is an error scraping the page
         """
         try:
-            response = requests.get(url, headers=self.headers)
+            response = requests.get(url, headers=self.headers, timeout=10)
             response.raise_for_status()
             soup = BeautifulSoup(response.content, 'html.parser')
             
