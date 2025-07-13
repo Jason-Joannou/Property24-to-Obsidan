@@ -25,7 +25,6 @@ class PropertyNoteGenerator:
             str: The validated vault directory
         """
         directory = os.path.normpath(directory)
-        print(f"Checking directory: {directory}")
         if not os.path.exists(directory):
             raise Exception(f"Vault directory {directory} does not exist. Please create it and try again.")
         return directory
@@ -164,6 +163,8 @@ class PropertyNoteGenerator:
 
         # Security: estimate at 0.02% of property price per month, capped between R300-R800
         security = max(300, min(price * 0.0002, 800))
+        levies = self.extract_numeric_value(levies)
+        rates_taxes = self.extract_numeric_value(rates_taxes)
 
         total_monthly = monthly_payment + levies + rates_taxes + insurance + maintenance + utilities + security
 
@@ -253,15 +254,21 @@ class PropertyNoteGenerator:
         return f"{filename}.md"
     
     def extract_numeric_value(self, value):
-        """Extract numeric value from string or return as is"""
+        """Extract numeric value from string or return 0 if invalid"""
+        if value is None:
+            return 0.0
+
+        if isinstance(value, (int, float)):
+            return float(value)
+
         if isinstance(value, str):
-            # Try to extract number
-            numbers = re.findall(r'[\\\\d,]+', value.replace(' ', ''))
-            if numbers:
-                clean_number = numbers[0].replace(',', '')
-                if clean_number.isdigit():
-                    return int(clean_number)
-        return value
+            clean = value.replace(',', '').replace('R', '').replace('$', '').strip()
+            try:
+                return float(clean)
+            except ValueError:
+                pass
+
+        return 0.0
     
     def generate_obsidian_note(self, property_data):
         """
