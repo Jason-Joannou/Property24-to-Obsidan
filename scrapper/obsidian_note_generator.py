@@ -242,7 +242,7 @@ class PropertyNoteGenerator:
         Returns:
             str: The generated filename
         """
-        suburb = property_data.get('suburb', 'property').lower()
+        suburb = property_data.get('suburb', 'property').lower().replace(' ', '_')
         listing_id = property_data.get('listing_id', '')
         
         if listing_id:
